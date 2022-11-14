@@ -1,0 +1,273 @@
+---
+title: "Assignment 3"
+author: "Louis Wang"
+date: "2022-10-12"
+output: html_document # you can change to other output format if you want
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+# Load packages
+library(tidyverse)
+library(Stat2Data)
+data("Hawks")
+```
+# 1. Exploratory data analysis
+```{r}
+head(Hawks)
+```
+
+## 1.1 (Q1)   
+```{r}
+# the Tail column of Hawks data frame
+HawksTail <- Hawks[, "Tail"]
+# compute the sample mean and sample median
+meanTail <- mean(HawksTail)
+medianTail <- median(HawksTail)
+```
+
+## 1.2 (Q1)
+```{r}
+#  compute the sample mean, sample median and trimmed sample mean (with q = 0.5) of the Hawk’s wing length and Hawk’s weight
+sampleSummary <- Hawks %>% summarise(Wing_mean = mean(Wing, na.rm = TRUE),
+                                     Wing_t_mean = mean(Wing, trim = 0.5, na.rm = TRUE),
+                                     Wing_med = median(Wing, na.rm = TRUE),
+                                     Weight_mean = mean(Weight, na.rm = TRUE),
+                                     Weight_t_mean = mean(Weight, trim = 0.5, na.rm = TRUE),
+                                     Weight_med = median(Weight, na.rm = TRUE))
+sampleSummary
+```
+
+## 1.2 (Q2)
+```{r}
+# Combine them with the group_by() function to obtain a breakdown by species
+sampleSummaryBySpecies <- Hawks %>% group_by(Species) %>% summarise(Wing_mean = mean(Wing, na.rm = TRUE),
+                                                                    Wing_t_mean = mean(Wing, trim = 0.5, na.rm = TRUE),
+                                                                    Wing_med = median(Wing, na.rm = TRUE),
+                                                                    Weight_mean = mean(Weight, na.rm = TRUE),
+                                                                    Weight_t_mean = mean(Weight, trim = 0.5, na.rm = TRUE),
+                                                                    Weight_med = median(Weight, na.rm = TRUE))
+sampleSummaryBySpecies
+```
+
+## 1.3 (Q1)
+```{r}
+#  letting a = 2 and b = 3, compute the mean of HawksTail*a+b
+fun1 <- function(x){
+  return (2 * x + 3)
+}
+anotherTail <- map_dbl(HawksTail, fun1)
+meanAnotherTail <- mean(anotherTail)
+# and then compare it with the one obtained from the mean of HawksTail
+meanAnotherTail == meanTail * 2 + 3
+```
+
+## 1.3 (Q2)
+```{r}
+# variance and standard deviation 
+varTail <- var(HawksTail, na.rm = TRUE)
+sdTail <- sd(HawksTail, na.rm = TRUE)
+varAnotherTail <- var(anotherTail, na.rm = TRUE)
+sdAnotherTail <- sd(anotherTail, na.rm = TRUE)
+# compare
+varAnotherTail == 4 * varTail & sdAnotherTail == 2 * sdTail
+```
+
+## 1.4
+```{r}
+# a vector called “hal” consisting of the talon lengths of all the hawks with any missing values removed
+hal<-Hawks$Hallux # Extract the vector of hallux lengths
+hal<-hal[!is.na(hal)] # Remove any nans
+# generate a new vector called “corrupted_hall” with 10 outliers each of value 100
+outlier_val<-100
+num_outliers<-10
+corrupted_hal<-c(hal,rep(outlier_val,times=num_outliers))
+#  compute the mean of the original sample and the corrupted sample
+mean(hal)
+mean(corrupted_hal)
+# generates a vector called “means_vect” which gives the sample means of corrupted samples with different numbers of outliers
+# means_vect is a vector of length 1001 with the i-th entry equal to the mean of a sample with i − 1 outliers
+num_outliers_vect <- seq(0,1000)
+means_vect <- c()
+for(num_outliers in num_outliers_vect){
+  corrupted_hal <- c(hal,rep(outlier_val,times=num_outliers))
+  means_vect <- c(means_vect, mean(corrupted_hal))
+}
+```
+
+## 1.4 (Q1)
+```{r}
+# Sample median
+medians_vect <- c()
+for(num_outliers in num_outliers_vect){
+  corrupted_hal <- c(hal,rep(outlier_val,times=num_outliers))
+  medians_vect <- c(medians_vect, median(corrupted_hal))
+}
+```
+
+## 1.4 (Q2)
+```{r}
+# Sample trimmed mean
+t_means_vect <- c()
+for(num_outliers in num_outliers_vect){
+  corrupted_hal <- c(hal,rep(outlier_val,times=num_outliers))
+  t_means_vect <- c(t_means_vect, mean(corrupted_hal, trim = 0.1))
+}
+```
+
+## 1.4 (Q3)
+```{r}
+# Visualisation
+df_means_medians <- data.frame(num_outliers=num_outliers_vect, mean=means_vect, t_mean=t_means_vect, median=medians_vect)
+df_means_medians %>% pivot_longer(!num_outliers, names_to = "Estimator", values_to = "Value") %>%
+                     ggplot(aes(x=num_outliers,color=Estimator, linetype=Estimator,y=Value)) + geom_line()+xlab("Number of outliers")
+```
+
+## 1.5 (Q1)
+```{r}
+#  create a box plot which summarises the distribution of hawk weights broken down by species
+ggplot(data = Hawks, aes(x = Species, y = Weight)) + geom_boxplot()
+```
+
+## 1.5 (Q2)
+```{r}
+# quantile and boxplots
+weightQuentile <- Hawks %>% group_by(Species) %>% 
+  summarise(quantile025 = quantile(Weight, prob = 0.25, na.rm = TRUE), 
+            quantile050 = quantile(Weight, prob = 0.5, na.rm = TRUE),
+            quantile075 = quantile(Weight, prob = 0.75, na.rm = TRUE))
+weightQuentile
+```
+
+## 1.5 (Q3)
+```{r}
+# outliers
+num_outliers <- function(x){
+  x<-x[!is.na(x)]
+  q25 <- quantile(x, prob = 0.25)
+  q75 <- quantile(x, prob = 0.75)
+  IQX <- q75 - q25
+  result <- length(x[(x > q75 + 1.5 * IQX) | (x < q25 - 1.5 * IQX)])
+  return (result)
+}
+num_outliers( c(0, 40,60,185))
+```
+
+## 1.5 (Q4)
+```{r}
+# Outliers by group
+Outliers <- Hawks %>% group_by(Species) %>% 
+  summarise(num_outliers_weight = num_outliers(Weight))
+Outliers
+```
+
+## 1.6 (Q1)
+```{r}
+# Compute the covariance and correlation between the Weight and Wing of the Hawks data
+covariance <- cov(Hawks$Weight, Hawks$Wing, use = 'complete.obs')
+covariance
+correlation <- cor(Hawks$Weight, Hawks$Wing, use = 'complete.obs')
+correlation
+```
+
+## 1.6 (Q2)
+```{r}
+# a = 2.4, b = 7.1, c = −1, d = 3
+fun2 <- function(x){
+  return (2.4 * x + 7.1)
+}
+fun3 <- function(x){
+  return (-1 * x + 3)
+}
+newCovariance <- cov(fun2(Hawks$Weight), fun3(Hawks$Wing), use = 'complete.obs')
+newCorrelation <- cor(fun2(Hawks$Weight), fun3(Hawks$Wing), use = 'complete.obs')
+# What is the covariance between a * Weight + b and c * Wing + d ?
+# What is the correlation between a * Weight + b and c * Wing + d ?
+newCovariance == -2.4 * covariance & (newCorrelation - correlation * -1) < 1e-10
+
+```
+
+# 2. Random experiments, events and sample spaces, and the set theory
+
+## 2.1 (Q1)
+- random experiment is a procedure which has a well-defined set of possible outcomes **and** could (at least in principle) be repeated arbitrarily many times
+- event is a set of possible outcomes of an experiment
+- sample space is the set of all possible outcomes of interest for a random experiment
+
+## 2.1 (Q2)
+- 2 of {1,2,3,4,5,6}
+- {{1,1},{1,2},{1,3},{1,4},{1,5},{1,6},  
+{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},  
+{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},  
+{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},  
+{5,1},{5,2},{5,3},{5,4},{5,5},{5,6},  
+{6,1},{6,2},{6,3},{6,4},{6,5},{6,6}}
+- total: 36
+- no
+
+## 2.2 (Q1)
+1. A ∪ B = {1,2,3,4,6}, A ∪ C = {1,2,3,4,5,6}
+2. A ∩ B = {2}, A ∩ C = ∅
+3. A \ B = {1,3},  A \ C = {1,2,3}
+4. no, yes
+5. yes
+6. {1,2,3}, {4,5,6}    {1,2}, {3,4}, {5,6}
+
+## 2.2 (Q2)
+1. A
+2. ∅
+3. 
+
+## 2.2 (Q3)
+cardinality = 2 ^ K
+
+## 2.2 (Q4)
+1. ∅
+2. S1∩S2=∅, S1∪S2=A1∪A2, S1∩S2∩S3=∅, S1∪S2∪S3=A1∪A2∪A3, S1∩S2∩S3∩S4=∅, S1∪S2∪S3∪S4=A1∪A2∪A3∪A4
+
+## 2.2 (Q5)
+1. 1Ac = 1 - 1A
+2. Ω
+3. 
+
+# 3. Visualisation
+
+## 3 (Q1)
+```{r}
+#  Density plot
+ggplot(data = Hawks, aes(x = Tail, color = Species)) + geom_density() + xlab("Tail(mm)")
+```
+
+## 3 (Q2)
+```{r}
+#  Violin plot
+ggplot(data = Hawks, aes(x = Tail, y = Species, fill = Species)) + geom_violin() + xlab("Tail(mm)")
+```
+
+## 3 (Q3)
+```{r}
+# Scatter plot
+scatter <- ggplot(data = Hawks, aes(x = Tail, y = Weight, color = Species)) + xlab("Tail(mm)") + ylab("Weight(mm)")
+scatter + geom_point()
+```
+
+## 3 (Q4)
+```{r}
+# Trend lines and facet wraps
+scatter + geom_point() + facet_wrap(vars(Species), scales='free') + geom_smooth(method = "lm")
+```
+
+## 3(Q5)
+```{r}
+# Adding annotations
+max(filter(Hawks)$Weight, na.rm = TRUE)
+scatter + geom_point() + 
+  geom_curve(x = 180, xend = 196, y = 1750, yend = 2030, arrow = arrow(length = unit(0.5, 'cm')), curvature = 0.1, color = 'black') + 
+  geom_text(x = 175, y = 1900, label = "heaviest hawk", color = 'black')
+```
+
+
+
+

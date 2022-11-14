@@ -1,0 +1,59 @@
+---
+title: "R language notes"
+author: "Louis"
+date: "2022-11-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Structure
+
+## Data Frame
+数据框旨在模拟数据集。是一个列表，列表中的元素是向量，这些向量构成数据框的列。（必须命名）Excel表就是数据框
+不是矩阵：数据类型每列可以不一致。
+```{r}
+# 创建
+# 使用data.frame()将向量合并为数据框
+a <- c(1,24,356)
+b <- c("one", "twofour", "threefivesix")
+fr <- data.frame(a, b)
+# 访问
+# 1. 通过索引
+fr[1] # 访问第一列，但仍是数据框
+fr[1,] # 访问第一行，但仍是数据框
+fr[,1] # 访问第一列，但是是数组
+fr[[1]] # 访问第一列，但是是数组
+# 2. 通过名称
+fr["2",] # 访问名称为"2"的行，但仍是数据框
+fr[,"b"] # 访问名称为"b"的列，但是是数组
+# 3. 通过$
+fr$a # 访问名称为"a"的列，是数组
+# 4.* attach()和detach()函数，使用后可直接访问
+# 5. with()函数
+```
+**理解dataframe[1]与dataframe[[1]]：单中括号只是取一部分，仍然是数据框；双中括号是取出一部分后再次取出里面的东西，拨开了外皮，得到的就是向量**
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

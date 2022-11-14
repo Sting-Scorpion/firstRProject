@@ -1,0 +1,175 @@
+---
+title: "Assignment 4"
+author: "Louis Wang"
+date: "2022-10-19"
+output: html_document # you can change to other output format if you want
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# 1. Probability theory
+
+## 1.1 (Q1)
+a = odd numbers less than 10, b = 0, c = even numbers less than 10
+Ω = {a random integer from 0 to 9}
+P{a,b} = 6/10 = 0.6, P{b,c} = 5/10 = 0.5
+
+## 1.1 (Q2)
+1. for q ∈ [0, 1]
+- P(∅) = 0 ≥ 0
+- P({0}) = 1 − q ≥ 0
+- P({1}) = q ≥ 0
+- P({0, 1}) = 1 ≥ 0
+2. for Ω = {0, 1}
+- P({0, 1}) = P(Ω) = 1
+3. for ∅ ∪ {0} ∪ {1} = Ω and ∅, {0}, {1} are disjoint
+- P(∅ ∪ {0} ∪ {1}) P(Ω) = P(∅) + P({0}) + P({1}) = 0 + (1-q) + q = 1
+
+## 1.2 (Q1)
+for A1, A2,... An are disjoint, so P(Aj ∩ Ai) = 0
+clearly \( P(\bigcup Ai) = \sum P(Ai) \)
+
+## 1.2 (Q2)
+for S ∪ Sc = Ω, so P(S ∪ Sc) = P(Ω) = 1
+P(S ∪ Sc) = P(S) + P(Sc) - P(S ∩ Sc) = P(S) + P(Sc)
+so, P(Sc) = 1 - P(S)
+
+## 1.2 (Q3)
+Ω = {1, 2, 3}, S1 = {1, 2}, S2 = {2, 3}
+P(S1) = 2/3, P(S2) = 2/3
+P(S1) + P(S2) = 4/3 \(\not=\) P(S1 ∪ S2) = P(Ω) = 1
+....
+
+# 2. Finite probability spaces
+```{r include=FALSE}
+choose(8, 3)
+```
+
+## 2.1 (Q1)
+\[ P(z) = \binom{22}{z}*(\frac{3}{10}) ^ {z} * (\frac{7}{10}) ^ {22 - z} \]
+
+## 2.1 (Q2)
+```{r}
+# write an R function computes the probability that z out of a total of the 22 balls selected are red
+prob_red_spheres <- function(z){
+  zp <- 22 - z
+  result <- choose(22, z) * (3/10) ^ z * (7/10) ^ zp
+  return (result)
+}
+prob_red_spheres(10)
+```
+
+##2.1 (Q3)
+```{r}
+x <- seq(1, 22, 1)
+prob_by_num_reds <- data.frame(num_reds = x, prob = prob_red_spheres(x))
+prob_by_num_reds %>% head(3)
+```
+
+## 2.1 (Q4)
+```{r}
+ggplot(data = prob_by_num_reds, aes(x = num_reds, y = prob)) + geom_line() + xlab("Number of reds") + ylab("Probability")
+```
+
+## 2.1 (Q5)
+```{r include = FALSE}
+sample(10, 22, replace=TRUE)
+
+## Setting the random seed just once
+set.seed(0)
+for(i in 1:5){
+  print(sample(100,5,replace=FALSE))
+  # The result may well differ every time
+}
+## Resetting the random seed every time
+for(i in 1:5){
+  set.seed(1)
+  print(sample(100,5,replace=FALSE))
+  # The result should not change
+}
+
+```
+
+```{r}
+num_trials<-1000 # set the number of trials
+set.seed(0) # set the random seed
+sampling_with_replacement_simulation<-data.frame(trial=1:num_trials) %>%
+  mutate(sample_balls = map(.x=trial, ~sample(10,22, replace = TRUE)))
+# generate collection of num_trials simulations
+
+lengths <- function(x){
+  return(length(x[x <= 3]))
+}
+sampling_with_replacement_simulation <- sampling_with_replacement_simulation %>% 
+  mutate(num_reds = map_dbl(sample_balls, lengths))
+```
+
+## 2.1 (Q6)
+```{r}
+num_reds_in_simulation<-sampling_with_replacement_simulation %>%
+  pull(num_reds)
+# we extract a vector corresponding to the number of reds in each trial
+prob_by_num_reds<-prob_by_num_reds %>%
+  mutate(predicted_prob=map_dbl(.x=num_reds,~sum(num_reds_in_simulation==.x))/num_trials)
+# add a column which gives the number of trials with a given number of reds
+```
+
+## 2.1 (Q7)
+```{r}
+prob_by_num_reds %>%
+  rename(TheoreticalProbability=prob, EstimatedProbability=predicted_prob) %>%
+  pivot_longer(cols=c("EstimatedProbability","TheoreticalProbability"),
+    names_to="Type",values_to="count") %>%
+    ggplot(aes(num_reds,count)) +
+    geom_line(aes(linetype=Type, color=Type)) + geom_point(aes(color=Type)) +
+    scale_linetype_manual(values = c("solid", "dashed"))+
+    theme_bw() + xlab("Number of reds") + ylab("Probabilities")
+```
+
+
+## 2.2 (Q1)
+```{r}
+# set a random seed
+set.seed(0)
+# set a number of trials, and a sample size (10)
+number_of_trials <- 1000
+# generate your samples
+sampling_without_replacement_simulation <- data.frame(trial = 1 : number_of_trials) %>% 
+  mutate(sample_balls = map(.x = trial, ~sample(100, 10)))
+#  compute the number of “reds”, “greens” and “blues” in your sample
+funred <- function(x){
+  return(length(x[x <= 50]))
+}
+funblue <- function(x){
+  return(length(x[x > 50 & x <= 80]))
+}
+fungreen <- function(x){
+  return(length(x[x > 80 & x <= 100]))
+}
+sample2 <- sampling_without_replacement_simulation[, "sample_balls"]
+sampling_without_replacement_simulation <- sampling_without_replacement_simulation %>% 
+  mutate(reds = map_dbl(sample2, funred), 
+         blues = map_dbl(sample2, funblue), 
+         greens = map_dbl(sample2, fungreen))
+# Compute the minimum of the three counts
+zero <- pmin(sampling_without_replacement_simulation[,"reds"], sampling_without_replacement_simulation[,"blues"], sampling_without_replacement_simulation[,"greens"])
+sampling_without_replacement_simulation <- sampling_without_replacement_simulation %>%
+  mutate(zeros = zero)
+# Compute the proportion of rows for which the minimum number of the three counts is zero
+length(zero[zero == 0]) / number_of_trials
+```
+## 2.2 (Q2)
+```{r}
+all <- choose(100, 10)
+miss_two <- choose(50, 10) + choose(30, 10) + choose(20, 10)
+miss <- choose(50, 10) + choose(70, 10) + choose(80, 10) - miss_two
+miss_rate <- miss / all
+miss_rate
+```
+
+
+
+
