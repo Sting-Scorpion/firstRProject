@@ -1,0 +1,172 @@
+---
+title: "Assignment 9"
+author: "Louis"
+date: "2022-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# 1. Basic concepts in classification
+
+# 2. A chi-squared test of population variance
+
+## (Q1)
+```{r}
+chi_square_test_one_sample_var <- function(sample, sigma_square_null){
+  sample <- sample[!is.nan(sample)] # remove any missing values
+  n <- length(sample) # sample length
+  #. compute test statistic
+  chi_squared_statistic <- (n-1)*var(sample)/sigma_square_null
+  # compute p-valu e
+  p_value <- 2*min(pchisq(chi_squared_statistic, df=n-1),
+  1-pchisq(chi_squared_statistic, df=n-1))
+  return (p_value)
+}
+```
+
+## (Q2)
+```{r}
+# Conduct a simulation study to see how the size of the test varies as a function of the significance level.
+trials <- seq(10000)
+sample_size <- 100
+significance_levels <- seq(0.01, 0.2, 0.01)
+
+mu_0 <- 1
+sigma_0 <- 2
+set.seed(0)
+
+df_simulated_var_test <- crossing(trials=trials,
+                                  significance_levels=significance_levels) %>%
+  mutate(sample=map(trials,~rnorm(sample_size, mean=mu_0, sd=sigma_0)) ) %>%
+  mutate(p_value = map_dbl(sample, ~chi_square_test_one_sample_var(.x, sigma_0^2) ) ) %>%
+  mutate(reject=(p_value<significance_levels))
+
+df_test_size <- df_simulated_var_test %>%
+  group_by(significance_levels) %>%
+  summarise(test_size=mean(reject))
+
+df_test_size %>% ggplot( aes(x=significance_levels, y=test_size) ) + geom_point() +
+  theme_bw() + xlab('significance level') + ylab('test size')
+```
+
+## (Q4)
+```{r}
+# Conduct a simulation study to see how the statistical power of the test varies as a function of the significance level.
+trials <- seq(10000)
+sample_size <- 100
+significance_levels <- seq(0.01, 0.2, 0.01)
+
+mu_0 <- 1
+sigma_0 <- 2
+sigma <- sqrt(6)
+set.seed(0)
+
+df_simulated_var_test <- crossing(trials=trials,
+                                  significance_levels=significance_levels) %>%
+  mutate(sample=map(trials,~rnorm(sample_size, mean=mu_0, sd=sigma)) ) %>%
+  mutate(p_value = map_dbl(sample, ~chi_square_test_one_sample_var(.x, sigma_0^2) ) ) %>%
+  mutate(reject=(p_value<significance_levels))
+
+df_power <- df_simulated_var_test %>%
+  group_by(significance_levels) %>%
+  summarise(power=mean(reject))
+
+df_power %>% ggplot( aes(x=significance_levels, y=power) ) + geom_point() +
+  theme_bw() + xlab('significance level') + ylab('Power')
+```
+
+## (Q5)
+Suppose we model the sequence of bill lengths as a sample of independent and identically distributed Gaussian random variables with a population mean $\mu$ and population standard deviation $\sigma$.
+```{r include=FALSE}
+# Load the “Palmer penguins” library
+library(palmerpenguins)
+```
+```{r}
+# extract a vector called “bill_adelie” consisting of the bill lengthsof the Adelie penguins belonging to the Adelie species.
+bill_adelie_df <- penguins %>% filter(species=='Adelie') %>%
+  select(bill_length_mm) %>% drop_na()
+bill_adelie <- pull(bill_adelie_df)
+# you can also use: bill_adelie <- bill_adelie_df$bill_length_mm
+
+# Now apply your function “chi_square_test_one_sample_var” to test the null hypothesis that
+# the population standard deviation is 3 mm at a significance level of α = 0.1.
+chi_square_test_one_sample_var(bill_adelie, 3^2)
+```
+
+# 3. The train test split
+
+## (Q1)
+```{r}
+library(Stat2Data)
+data(Hawks)
+
+# extract a subset of the data frame called “hawks_total” with five columns - “Weight”, “Wing”, “Hallux”, “Tail” and “Species”
+hawks_total <- Hawks %>% select( Weight, Wing, Hallux, Tail, Species) %>%
+  # should only include rows corresponding to hawks from either the “Sharp-shinned” (SS) or the “Cooper’s” (CH) species
+  filter(Species=='SS' | Species =='CH') %>% drop_na() %>%
+  #  1 if the hawk belongs to the sharp-shinned species and 0 if the hawk belongs to Cooper’s species
+  mutate(Species=as.numeric(Species=='SS'))
+```
+
+## (Q2)
+```{r}
+# implement a train test split for your “hawks_total” data frame
+num_total <- hawks_total %>% nrow() # number of penguin data
+# use 60% of your data within your training data
+num_train <- floor(num_total*0.6) # number of train examples
+# and 40% in your test data
+num_test <- num_total - num_train # number of test samples
+set.seed(123) # set random seed for reproducibility
+
+test_inds <- sample(seq(num_total),num_test) # random sample of test indicies
+train_inds <- setdiff(seq(num_total),test_inds) # training data indicies
+
+hawks_train <- hawks_total %>% filter(row_number() %in% train_inds) # train data
+hawks_test <- hawks_total %>% filter(row_number() %in% test_inds) # test data
+hawks_train %>% nrow()
+
+hawks_test%>%nrow()
+```
+
+## (Q3)
+```{r}
+# extract a data frame called “hawks_train_x” from your training data containing the feature vectors and no labels
+hawks_train_x <- hawks_train %>% select(-Species) # train feature vectors
+# extract a vector called “hawks_train_y” consisting of labels from your training data
+hawks_train_y <- hawks_train %>% pull(Species) # train labels
+hawks_test_x <- hawks_test %>% select(-Species) # test feature vectors
+hawks_test_y <- hawks_test %>% pull(Species) # test labels
+```
+
+## (Q4)
+```{r}
+# only two possible phi in this case: one for y_hat=0, the other for y_hat=1
+train_error_phi_0 <- mean(abs(hawks_train_y-0))
+train_error_phi_1 <- mean(abs(hawks_train_y-1))
+
+# finding y-hat with minimum training error
+if(train_error_phi_0<train_error_phi_1){
+  y_hat<-0
+}else{
+  y_hat<-1
+}
+
+# alternatively, you can also compute y_hat by (why?):
+# y_hat<-as.numeric(mean(hawks_train_y)>=0.5)
+
+y_hat
+```
+
+## (Q5)
+```{r}
+train_error_simple <- mean(abs(y_hat-hawks_train_y)) # train error
+test_error_simple <- mean(abs(y_hat-hawks_test_y)) # test error
+train_error_simple
+
+test_error_simple
+```
+

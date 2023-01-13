@@ -64,7 +64,43 @@ When X and Y are independent, E(XY)=E(X)E(Y). So \(COV(X,Y)=E[(X-E(X)(Y-E(Y)))]=
 1-\beta & 3\leq X<10\\
 1 & X\geq 10\\
 \end{cases}$$
-.....
 
+## 2.2 (Q4)
+Define a new random variance Y = X1 + X2 + · · · + Xn where X1, X2, · · · , Xn are independent random variables, each of which has the same distribution as the random variable X.
 
+### step1
+```{r}
+# Let n = 3 and generate 50000 samples of {X1, X2, X3} using the rmultinom() function. Store the samples in an object called samples_Xi.
+# Then based on samples_Xi, create 50000 samples of Y and store it in a data-frame called samples_Y, consisting of a single column called Y.
+samples_Xi <- rmultinom(50000, 3, c(0.5, 0.2, 0.3) )
+samples_Y = data.frame(Y=0*samples_Xi[1,] + 3*samples_Xi[2,] + 10*samples_Xi[3,])
+```
+
+### step2
+```{r}
+# Use the ggplot and geom_bar() function to create a bar plot for the samples of Y .
+ggplot(samples_Y, aes(Y)) + geom_bar() + theme_bw()
+```
+
+### step3
+```{r}
+# Now, increase the values of n by setting n = 20, and repeat Step 1 and Step 2 to create a new bar plot for the samples of Y .
+samples_Xi <- rmultinom(50000, 25, c(0.5, 0.2, 0.3) )
+samples_Y = data.frame(Y=0*samples_Xi[1,] + 3*samples_Xi[2,] + 10*samples_Xi[3,])
+ggplot(samples_Y, aes(Y)) + geom_bar() + theme_bw()
+
+# The minimum value, maximum value
+print(range(samples_Y))
+
+# and range of the sample
+print(diff(range(samples_Y)))
+```
+
+### step4
+```{r}
+# increase n to 2000 and do the plot again
+samples_Xi <- rmultinom(50000, 2000, c(0.5, 0.2, 0.3) )
+samples_Y = data.frame(Y=0*samples_Xi[1,] + 3*samples_Xi[2,] + 10*samples_Xi[3,])
+ggplot(samples_Y, aes(Y)) + geom_bar() + theme_bw()
+```
 

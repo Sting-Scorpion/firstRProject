@@ -1,0 +1,372 @@
+---
+title: "Assignment 8"
+author: "Louis"
+date: "2022-11-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# 1. Obstacles to valid scientific inference
+1. Measurement distortions
+Measurement distortions occur whenever there is a mismatch between the quantities recorded within the data and the true variable of interest.  
+*Example*: Suppose we are investigating the effect of a new type of feed on chickens. For the purpose of the experiment a large sample of chickens is split into two groups. One group is given feed type A, and the other feed type B. After some time has elapsed, the chicken’s weights are all measured. Suppose the measuring equipment used to weight the chickens given feed type A had a downward bias. On the other hand, the measuring device used to weight the chickens given feed type B has no such bias. We could then observe a data set where the recorded weights for chickens receiving feed source B typically exceed those receiving feed type A. However, this difference is purely an artefact of the faulty measurement equipment.
+2. Selection bias
+Selection bias occurs whenever the sample included in the analysis misrepresents the underlying population of interest.
+a) Sample bias: When some members of the population are more likely to be selected than others.
+b) Self selection bias: Occurs whenever people decide whether or not they should be assigned to a particular
+group.
+c) Attrition bias: Occurs whenever the sample is distorted by people leaving the study.
+d) Post-hoc selection: Occurs when a subset of the data is chosen based on the sample itself.  
+*Example*: A classic historical example of sample bias is the Literary Digest poll of 1936. In this people were asked about their voting intentions. The prediction was for a 57% victory for Republican Landon over Roosevelt. In fact Roosevelt won the election. The data was collected based upon surveys. These suveys were carried out based upon lists from telephone books and club membership. At the time both telephone ownership and club membership were indicators of wealth, so the sample was biased towards people with higher levels of wealth. At the time, higher levels of wealth were slightly more likely to vote Republican than Democrat. Hence, the selection bias resulted in a misleading result. Subsequent Gallop polls created more accurate results with smaller sample sizes.
+3. Confounding variables
+Suppose that we are interested in understanding the causal effect of an independent variable X on a dependent variable Y. A confounding variable is a third causal factor Z which effects both X and Y. This makes it difficult to disentangle causal effects from purely correlative behavior.  
+*Example*: As an example consider a scientific study into the causal effect of regular cardio-vascular exercise on longevity. Here a confounding variable could be someones overall interest in a healthy lifestyle. This is likely to effect someones via the causal effect of increased cardio-vascular exercise. However, it is likely that an interest in a healthy lifestyle will also effect the amount of fresh fruit and vegetables someone eats, for
+example. This may also have a causal effect on longevity. Hence, in light of the confounding variables it is difficult to distinguish a causal effect from a purely correlatative relationship.
+
+
+# 2. paired t-test and effect size
+```{r}
+library(PairedData) # you might need to install the package first
+data("Barley")
+detach('package:PairedData', unload=TRUE)
+detach('package:MASS', unload=TRUE)
+# unload package because it contains another select() function
+head(Barley, 4)
+```
+
+## Q1
+```{r}
+# Carry out a paired t-test to determine whether there is a difference in average yield between the two types of barley.
+# Use a significance level of 0.01.
+t.test(x=Barley$Glabron, y=Barley$Velvet, paired=TRUE, conf.level=0.99)
+```
+The p-value is greater than the significance level, we do not reject the hypothsis, so there there is no difference between two types.
+
+## Q2
+```{r}
+# Compute the effect size using Cohen’s d statistic
+diff <- Barley$Glabron - Barley$Velvet
+x_bar <- mean(diff)
+s <- sd(diff)
+effect_size <- x_bar/s
+effect_size
+```
+
+## Q3
+What assumptions are required for the paired t-test? Are these assumptions justified in this case?
+
+1. Variables were continuous variables
+2. Variables are independent
+3. There are no significant outliers for the variables
+4. The variables are (approximately) normally distributed  
+**We assume that the difference of the two sample is either i.i.d. Gaussian or i.i.d. with a large sample size.**
+```{r}
+Barley %>% nrow()
+
+Barley %>%
+  mutate(diff=Glabron-Velvet) %>%
+  ggplot(aes(x=diff)) + geom_density() + theme_bw() +
+  labs(x="Differences of yields (bushels)",y="Density")
+
+Barley %>%
+  mutate(diff=Glabron-Velvet) %>%
+  ggplot(aes(sample=diff))+theme_bw()+
+  stat_qq()+stat_qq_line(color="blue")+
+  labs(x="Theoretical", y="Sample")
+```
+**It seems that the difference between the two samples is approximately Gaussian (although the sample size itself its relatively small). Since the distribution of the data appears approximately Gaussian we are justified in using this approach.**
+
+# 3. Implementing unpaired t-test
+```{r}
+# t.test(body_mass_g~species, data=peng_AC,var.equal = TRUE)
+library(palmerpenguins)
+peng_AC<-penguins %>%
+  drop_na(species,body_mass_g) %>%
+  filter(species !="Gentoo")
+head(peng_AC %>% select(species, flipper_length_mm, body_mass_g), 5)
+
+```
+
+
+## Q1
+```{r}
+val_col <- "body_mass_g"
+group_col <- "species"
+data <- peng_AC
+data_new <- data %>%
+  # rename the columns; note that you can not drop the "!!" (why?)
+  rename(group=(!!group_col),val=(!!val_col))%>%
+  group_by(group) %>%
+  drop_na(val) %>%
+  summarise(mn=mean(val))
+
+data_new
+
+data_new$mn[2]
+
+t_test_function <- function(data, val_col, group_col, val_equal=TRUE){
+  stats <- data %>%
+    # rename the columns; note that you can not drop !! (why?)
+    rename(group=(!!group_col),val=(!!val_col))%>%
+    group_by(group) %>%
+    drop_na(val) %>%
+    summarise(mn=mean(val), vr=var(val), n=n())
+  pooled_sd <- sqrt(((stats$n[1]-1)*stats$vr[1]+(stats$n[2]-1)*stats$vr[2])/(stats$n[1]+stats$n[2]-2))
+  if (val_equal){ # unpaired student t-test
+    # test statistic
+    t_stat<-(stats$mn[1]-stats$mn[2])/
+    (pooled_sd*sqrt(1/stats$n[1]+1/stats$n[2]))
+    # degree of freedom
+    dof<-stats$n[1]+stats$n[2]-2
+  } else { # we can also implement Welch's t-test as follows
+    # test statistic
+    t_stat=(stats$mn[1]-stats$mn[2])/
+    sqrt(stats$vr[1]/stats$n[1]+stats$vr[2]/stats$n[2])
+    # degree of freedom
+    dof=(stats$vr[1]/stats$n[1]+stats$vr[2]/stats$n[2])^2/((stats$vr[1]/stats$n[1])^2/(stats$n[1]-1)+(stats$vr[2]/stats$n[2])^2/(stats$n[2]-1))
+  }
+  # p-value
+  p_val<- 2*(1-pt(abs(t_stat),df=dof))
+  # effect size
+  effect_size <- (stats$mn[1]-stats$mn[2])/(pooled_sd)
+  return(data.frame(t_stat=t_stat, effect_size=effect_size, p_val=p_val))
+}
+t_test_function(data=peng_AC,val_col="body_mass_g",group_col="species")
+```
+
+## Q2
+```{r}
+t_test_function(data=peng_AC,val_col="body_mass_g",group_col="species", val_equal=FALSE)
+t.test(body_mass_g~species, data=peng_AC,var.equal = FALSE)
+```
+
+# 4. Useful concepts in statistical hypothesis testing
+
+## Q1
+1. The null hypothesis is our default position in a statistical hypothesis which typically declares the absence of some interesting phenomenon for example the equality of two statistical parameters.
+2. The alternative hypothesis is a statistical hypothesis which contradicts the null hypothesis and typically declares the presence of some interesting phenomenon, often consistent with the research hypothesis a scientist is attempting to prove. For example, a difference in the values of two statistical parameters.
+3. A test statistic is some function of the data used within a statistical hypothesis test. The test statistic must have a known distribution under the null hypothesis. In addition, the test statistic should emphasize differences between null and alternative hypothesis.
+4. A type 1 error is a rejection of the null hypothesis in favor of the alternative hypothesis when the null hypothesis is true.
+5. A type 2 error is a failure to reject the null hypothesis in favor of the alternative hypothesis when the alternative hypothesis holds.
+6. The size of the test is the probability of a type 1 error under the null hypothesis.
+7. The power of a test is one minus the probability of a type 2 error under an alternative hypothesis. That is, the probability of rejecting the null hypothesis under an alternative hypothesis. Typically this depends upon the particular alternative hypothesis.
+8. The significance level is an upper bound on the size of the test. This should be chosen in advance of seeing the data. A typical value is α = 0.05.
+9. The p-value is probability under the null hypothesis that the test statistic will achieve a value as extreme or more extreme than the value which is actually observed. A very small p-value indicates that the observed data is sufficiently inconsistent with the null hypothesis that the null hypothesis can be reasonably rejected.
+10. The effect size is a measure of the magnitude of the observed phenomenon which reflects the extent to which the null hypothesis is false.
+
+## Q2
+(1). No. The p-value is the probability, under the null hypothesis, of a test-statistic as extreme or more extreme than the observed numerical value.
+(2). No. For example, it might be the case that the null hypothesis is false, but we have either a small sample size or a relatively small effect size.
+
+# 5. Investigating test size for an unpaired Student’s t-test
+
+## Q1
+```{r}
+num_trials<-10000
+sample_size<-30
+mu_0<-1
+mu_1<-1
+sigma_0<-3
+sigma_1<-3
+set.seed(0) # set random seed for reproducibility
+single_alpha_test_size_simulation_df <- data.frame(trial=seq(num_trials)) %>%
+  # generate random Gaussian samples
+  mutate(sample_0=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_0,sd=sigma_0)),
+    sample_1=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_1,sd=sigma_1))) %>%
+    # generate p values
+  mutate(p_value=pmap(.l=list(trial,sample_0,sample_1),
+    .f=~t.test(..2,..3,var.equal = TRUE)$p.value))
+alpha_list = seq(0.01, 0.25, 0.01)
+compute_test_size <- function(alpha){
+  # type I error
+  type_1_error = single_alpha_test_size_simulation_df$p_value<alpha
+  return (mean(type_1_error)) # estimate of coverage probability
+}
+multiple_alpha_test_size_simulation_df <- data.frame(alpha=alpha_list) %>%
+  mutate(test_size = map_dbl(alpha, compute_test_size))
+multiple_alpha_test_size_simulation_df %>% ggplot(aes(x=alpha, y=test_size)) +
+  geom_point() + ylab('Test size') + theme_bw()
+```
+
+# 6. The statistical power of an unpaired t-test
+
+## Q1
+```{r}
+num_trials<-10000
+n_0<-30
+n_1<-30
+mu_0<-3
+mu_1<-4
+sigma_0<-2
+sigma_1<-2
+alpha<-0.05
+set.seed(0) # set random seed for reproducibility
+single_alpha_power_df <- data.frame(trial=seq(num_trials)) %>%
+  # generate random Gaussian samples
+  mutate(sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)),
+    sample_1 = map(.x=trial,.f =~ rnorm(n=n_1,mean=mu_1,sd=sigma_1))) %>%
+  # for each sample, generate p value; check examples of pmap() with ?map
+  mutate(p_value=pmap(.l = list(trial,sample_0,sample_1),
+    .f =~ t.test(..2, ..3, var.equal = TRUE)$p.value))
+
+compute_power <- function(alpha){
+  reject_null <- single_alpha_power_df$p_value < alpha
+  return (mean(reject_null))
+}
+
+multiple_alpha_power_df <- data.frame(alpha=seq(0.01, 0.25, 0.01)) %>%
+  mutate(power= map_dbl(alpha, compute_power))
+multiple_alpha_power_df %>% ggplot(aes(x=alpha, y=power)) +
+  geom_point() + ylab('Power') + theme_bw()
+
+```
+
+## Q2
+```{r}
+num_trials<-1000
+n_0<-30
+n_1<-30
+mu_0<-3
+# mu_1<-4
+sigma_0<-2
+sigma_1<-2
+alpha<-0.05
+set.seed(0) # set random seed for reproducibility
+
+compute_power_from_mu1 <- function(mu_1){
+  single_mu1_power_df <- data.frame(trial=seq(num_trials)) %>%
+    # generate random Gaussian samples
+    mutate(sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)),
+           sample_1 = map(.x=trial,.f =~ rnorm(n=n_1,mean=mu_1,sd=sigma_1))) %>%
+    # for each sample, generate p value; check examples of pmap() with ?map
+    mutate(p_value=pmap(.l = list(trial,sample_0,sample_1),
+                        .f =~ t.test(..2, ..3, var.equal = TRUE)$p.value))
+  
+reject_null <- single_mu1_power_df$p_value < alpha
+  return (mean(reject_null))
+}
+
+multiple_mu1_power_df <- data.frame(mu_1=seq(3.0, 8.0, 0.1)) %>%
+  mutate(power= map_dbl(mu_1, compute_power_from_mu1))
+
+multiple_mu1_power_df %>% ggplot(aes(x=mu_1-mu_0, y=power)) +
+  geom_point() + ylab('Power') + theme_bw()
+```
+
+## Q3
+```{r}
+num_trials<-1000
+n_0<-30
+n_1<-30
+mu_0<-3
+mu_1<-4
+#sigma_0<-2
+#sigma_1<-2
+alpha<-0.05
+set.seed(0) # set random seed for reproducibility
+
+compute_power_from_sigma <- function(sigma){
+  sigma_0 <- sigma
+  sigma_1 <- sigma
+  single_sigma_power_df <- data.frame(trial=seq(num_trials)) %>%
+    # generate random Gaussian samples
+    mutate(sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)),
+           sample_1 = map(.x=trial,.f =~ rnorm(n=n_1,mean=mu_1,sd=sigma_1))) %>%
+    # for each sample, generate p value; check examples of pmap() with ?map
+    mutate(p_value=pmap(.l = list(trial,sample_0,sample_1),
+                        .f =~ t.test(..2, ..3, var.equal = TRUE)$p.value))
+
+  reject_null <- single_sigma_power_df$p_value < alpha
+  return (mean(reject_null))
+}
+multiple_sigma_power_df <- data.frame(sigma=seq(0.1, 3.0, 0.01)) %>%
+  mutate(power= map_dbl(sigma, compute_power_from_sigma))
+
+multiple_sigma_power_df %>% ggplot(aes(x=sigma, y=power)) +
+  geom_point() + ylab('Power') + theme_bw()
+```
+
+## Q4
+```{r}
+num_trials<-1000
+#n_0<-30
+#n_1<-30
+mu_0<-3
+mu_1<-4
+sigma_0<-2
+sigma_1<-2
+alpha<-0.05
+set.seed(0) # set random seed for reproducibility
+
+compute_power_from_sz <- function(sz){
+  n_0 <- sz
+  n_1 <- sz
+  single_sigma_power_df <- data.frame(trial=seq(num_trials)) %>%
+    # generate random Gaussian samples
+    mutate(sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)),
+           sample_1 = map(.x=trial,.f =~ rnorm(n=n_1,mean=mu_1,sd=sigma_1))) %>%
+    # for each sample, generate p value; check examples of pmap() with ?map
+    mutate(p_value=pmap(.l = list(trial,sample_0,sample_1),
+                        .f =~ t.test(..2, ..3, var.equal = TRUE)$p.value))
+  reject_null <- single_sigma_power_df$p_value < alpha
+  return (mean(reject_null))
+}
+
+multiple_sz_power_df <- data.frame(sample_size=seq(5, 300, 6)) %>%
+  mutate(power= map_dbl(sample_size, compute_power_from_sz))
+
+multiple_sz_power_df %>% ggplot(aes(x=sample_size, y=power)) +
+  geom_point() + ylab('Power') + theme_bw()
+```
+
+# 7. (*Optional) Comparing the paired and unpaired t-tests on paired data
+
+## Q1
+```{r}
+num_trials<-10000
+n_0<-30
+n_1<-30
+mu_0<-3
+mu_Z<-1 # mean of Z
+sigma_0<-2
+sigma_Z<-2
+alpha<-0.05
+set.seed(0) # set random seed for reproducibility
+
+single_alpha_power_df <- data.frame(trial=seq(num_trials)) %>%
+  # generate random Gaussian samples
+  mutate(sample_0 = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_0,sd=sigma_0)) ) %>%
+  mutate(sample_Z = map(.x=trial,.f =~ rnorm(n=n_0,mean=mu_Z,sd=sigma_Z)) ) %>%
+  mutate(sample_1 = pmap(.l=list(sample_0, sample_Z),.f =~ (..1+..2))) %>%
+  # for each sample, generate p value; check examples of pmap() with ?map
+  mutate(p_value_paired=pmap(.l = list(trial,sample_0,sample_1),
+                             .f =~ t.test(..2, ..3, paired=TRUE)$p.value)) %>%
+  mutate(p_value_unpaired=pmap(.l = list(trial,sample_0,sample_1),
+                               .f =~ t.test(..2, ..3, paired=FALSE)$p.value))
+
+compute_power_paired <- function(alpha){
+  reject_null <- single_alpha_power_df$p_value_paired < alpha
+  return (mean(reject_null))
+}
+
+compute_power_unpaired <- function(alpha){
+  reject_null <- single_alpha_power_df$p_value_unpaired < alpha
+  return (mean(reject_null))
+}
+
+multiple_alpha_power_df <- data.frame(alpha=seq(0.01, 0.25, 0.01)) %>%
+  mutate(power_paired= map_dbl(alpha, compute_power_paired)) %>%
+  mutate(power_unpaired= map_dbl(alpha, compute_power_unpaired))
+
+colors <- c('Paired'='red', 'Unpaired'='blue')
+
+multiple_alpha_power_df %>% ggplot() +
+  geom_point(aes(x=alpha, y=power_paired, color='Paired')) +
+  geom_point(aes(x=alpha, y=power_unpaired, color='Unpaired')) + ylab('Power') +
+  theme_bw() + scale_color_manual(name = "method", values=colors)
+```
+

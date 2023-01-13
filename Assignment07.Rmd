@@ -1,0 +1,382 @@
+---
+title: "Assignment 7."
+author: "Louis"
+date: "2022-11-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# 1. Maximum likelihood estimates
+```{r}
+library(Stat2Data)
+data("Hawks")
+```
+
+## 1.1 (Q1)
+```{r}
+# filter extract a subset of the Hawks data set so that every Hawk belongs to the “Red-Tailed” species
+# and extract the “Weight”, “Tail” and “Wing” columns
+RedTailedDf <- Hawks %>% 
+  filter(Species == "RT") %>%
+  select(Weight, Tail, Wing)
+```
+
+## 1.1 (Q2)
+```{r}
+# Apply the maximum likelihood method to compute the estimates for tail lengths
+n = length(RedTailedDf$Tail)
+muMLE <- mean(RedTailedDf$Tail)
+sigmaMLE <- sd(RedTailedDf$Tail, na.rm=TRUE) * sqrt((n-1)/n)
+sigma_squared_mle <- sigmaMLE ^ 2
+```
+
+## 1.1 (Q3)
+```{r}
+#  generate a plot which compares the probability density function for your fitted Gaussian model for the tail length of the Red-Tailed hawks with a kernel density plot
+
+# indices
+x <- seq(muMLE-3*sigmaMLE, muMLE+3*sigmaMLE, sigmaMLE*0.001)
+
+# plot estimated density function
+color <- c("MLE density"="red", "Kernel density"="blue")
+estimated_density <- data.frame(Length=x, Density=dnorm(x, mean=muMLE, sd=sigmaMLE))
+plot_obj <- ggplot() + 
+  geom_line(data=estimated_density,aes(x=Length, y=Density, color="MLE density"))
+
+# kernel density plot of the sample
+plot_obj + 
+  geom_density(data=RedTailedDf, aes(x=Tail, color="Kernel density")) +
+  labs(y="Tail length (mm)") +
+  theme_bw() + scale_color_manual(values = color)
+
+#ggplot() +
+#  geom_density(aes(x=RedTailedDf$Tail, color="Kernel density")) + 
+#  geom_line(aes(x=x, y=Tail_length, color="MLE density")) + 
+#  theme_bw() + xlab("Length") + ylab("Tail length(mm)")
+```
+
+## 1.2 (Q1)
+```{r}
+# consider different sample sizes ranging from 5 to 100 in increment of 5
+sample_size <- seq(5, 100, 5)
+# each sample size, conduct 1000 trials
+num_trials_per_size <- 1000
+mu_0 <- 1
+sigma_0 <- 3
+
+compute_V_mle <- function(x){ return( mean( (x-mean(x))^2 ) ) }
+compute_V_U <- function(x){
+  n <- length(x)
+  return (compute_V_mle(x)*n/(n-1))
+}
+
+df1 <- crossing(sample_size, trials=seq(num_trials_per_size) ) %>%
+  # create samples
+  mutate(samples = map(sample_size, ~rnorm(.x, mean = mu_0, sd = sigma_0) ) ) %>%
+  # compute V_mle
+  mutate(V_mle = map_dbl(samples, compute_V_mle)) %>%
+  # compute V_U
+  mutate(V_U = map_dbl(samples, compute_V_U))
+
+# compute bias
+df_bias1 <- df1 %>% group_by(sample_size) %>%
+  summarise(V_mle_bias=mean(V_mle)-sigma_0^2, V_U_bias=mean(V_U)-sigma_0^2)
+
+df_bias_longer1 <- df_bias1 %>%
+  pivot_longer(c(V_mle_bias, V_U_bias), names_to = 'Estimator', values_to = 'Bias' ) %>%
+  # change the names which will be displayed as Legend of the plot
+  mutate(Estimator=case_when(Estimator=='V_mle_bias'~'MLE',
+                             Estimator=='V_U_bias'~'Unbiased estimator'))
+
+df_bias_longer1 %>% ggplot(aes(x=sample_size, y=Bias, color=Estimator)) + geom_line() +
+  theme_bw() + xlab('Sample Size')
+```
+
+## 1.2 (Q2)
+```{r}
+df2 <- crossing(sample_size, trials=seq(num_trials_per_size) ) %>%
+  # create samples
+  mutate(samples = map(sample_size, ~rnorm(.x, mean = mu_0, sd = sigma_0) ) ) %>%
+  # compute V_U_sqrt
+  mutate(V_U_sqrt = map_dbl(samples, ~sqrt(compute_V_U(.x) )))
+
+# compute bias
+df_bias2 <- df2 %>% group_by(sample_size) %>%
+  summarise(V_U_sqrt_bias=mean(V_U_sqrt)-sigma_0)
+
+df_bias_longer2 <- df_bias2 %>%
+  pivot_longer(c(V_U_sqrt_bias), names_to = 'Estimator', values_to = 'Bias' ) %>%
+  # change the names which will be displayed as Legend of the plot
+  mutate(Estimator=case_when(Estimator=='V_U_sqrt_bias'~'sqrt(V_U)'))
+
+df_bias_longer2 %>% ggplot(aes(x=sample_size, y=Bias, color=Estimator)) + geom_line() +
+  theme_bw() + xlab('Sample Size')
+```
+**biased**
+
+## 1.3 (Q1)
+\(l(\lambda)=\prod_{i=1}^{n}{\frac{\lambda^{xi}}{xi!}e^{-\lambda}}=e^{-n\lambda}\lambda^{n\bar{X}}\prod_{i=1}^n{\frac{1}{xi!}}\)
+\(\ln l(\lambda)=-n\lambda+\sum_{i=1}^n{(xi\ln\lambda-\ln (xi!))}\)
+\(\frac{\partial}{\partial\lambda}\log l(\lambda)=-n+\sum_{i=1}^n\frac{xi}{\lambda}=-n+\frac{n\bar{X}}{\lambda}\)
+
+## 1.3 (Q2)
+\(let\ \frac{\partial}{\partial\lambda}\log l(\lambda)=0,\ we\ can\ get\ \lambda=\bar X\)
+
+## 1.3 (Q3)
+```{r}
+lambda_0 <- 0.5
+num_trials_per_sample_size <- 1000
+
+df = crossing(sample_size=seq(10, 1000, 10), trials=seq(num_trials_per_sample_size)) %>%
+  # create samples
+  mutate(samples=map(sample_size, ~rpois(.x, lambda_0)) ) %>%
+  # compute MLE
+  mutate(lambda_mle = map_dbl(samples, ~mean(.x)))
+
+df_mse <- df %>% group_by(sample_size) %>%
+  summarise(mse=mean( (lambda_mle-lambda_0)^2 ))
+
+ggplot() + geom_line(data=df_mse, aes(x=sample_size, y=mse)) +
+  theme_bw() + xlab('Sample Size')
+
+#lambda <- 0.5
+#poisson_sample <- rpois(1000, lambda)
+#lambda_MLE <- mean(poisson_sample)
+#ggplot() +
+#  geom_density(aes(x=poisson_sample,color="Kernel")) + 
+#  geom_density(aes(x=rpois(1000, lambda_MLE),color="MLE"))
+```
+
+## 1.3 (Q4)
+```{r}
+VonBortkiewicz <- read.csv("D:/Uni/Bristio/TB1/SCEM/lesson7/VonBortkiewicz.csv")
+fatalities <- VonBortkiewicz %>%
+  pull("fatalities")
+
+lambda_MLE <- mean(fatalities)
+lambda_MLE
+
+predict_prob_no_fatalities <- dpois(0,lambda_MLE)
+predict_prob_no_fatalities
+
+mean(fatalities==0) # comparison
+```
+
+## * 1.3 (Q5)
+```{r}
+set.seed(0)
+lambda_0 = 0.5
+sample_size <- 1000
+
+df <- data.frame(trials=seq(1000)) %>%
+  # create samples
+  mutate(sample= map(trials, ~rpois(sample_size, lambda_0))) %>%
+  # compute MLE
+  mutate(MLE = map_dbl(sample, mean) ) %>%
+  # the quality of interest
+  mutate(quantity = sqrt(sample_size/lambda_0)*(MLE-lambda_0) )
+
+# create kernel density plot
+ggplot(df, aes(x=quantity) ) + geom_density() +
+  theme_bw()
+```
+
+## 1.4 (Q1)
+\(l(\lambda)=\prod_{i=1}^{n}{\lambda e^{-\lambda X_i}}=\lambda^ne^{-\lambda\sum_{i=1}^nX_i}\)
+\(\ln(l(\lambda))=n\ln(l)-\lambda\sum_{i=1}^nX_i=n\ln(l)-n\lambda\bar X\)
+\(let\ \frac{\partial\ln(l(\lambda))}{\partial\lambda}=0,\ we\ have\ \lambda=\frac{1}{\bar X},\ so\ \lambda_0=\frac{1}{\bar X}\)
+
+## 1.4 (Q2)
+```{r}
+CustomerPurchase <- read.csv("D:/Uni/Bristio/TB1/SCEM/lesson7/CustomerPurchase.csv")
+
+CustomerPurchase <- CustomerPurchase %>%
+  mutate(time_diff=lead(Time)-Time)
+
+head(CustomerPurchase)
+```
+
+## 1.4 (Q3)
+```{r}
+lambda_mle = 1/mean(CustomerPurchase$time_diff, na.rm=TRUE)
+lambda_mle
+```
+
+## 1.4 (Q4)
+```{r}
+prob_excess_one_minute <- 1 - pexp(60, rate=lambda_mle)
+prob_excess_one_minute
+```
+
+# 2. Confidence intervals
+
+## 2.1 (Q2)
+```{r}
+weights <- Hawks %>% filter(Species=="RT" ) %>%
+  select(Weight) %>%
+  filter(complete.cases(Weight)) %>%
+  # removing NAs; you can also use discard(is.na) after calling pull()
+  pull()
+
+alpha <- 0.01
+sample_size <- length(weights) # adelie_flippers is a given vector
+sample_mean <- mean(weights)
+sample_sd <- sd(weights)
+t <- qt(1-alpha/2,df=sample_size-1)
+# confidence interval
+confidence_interval_l <- sample_mean-t*sample_sd/sqrt(sample_size)
+confidence_interval_u <- sample_mean+t*sample_sd/sqrt(sample_size)
+confidence_interval <- c(confidence_interval_l,confidence_interval_u)
+confidence_interval
+```
+
+## 2.1 (Q3)
+```{r}
+ggplot(data=data.frame(Weights=weights), aes(x=Weights)) + geom_density() +
+  theme_bw()
+
+ggplot(data=data.frame(Weights=weights), aes(sample=Weights)) + stat_qq() +
+  theme_bw() + stat_qq_line(color="blue")
+
+Hawks%>%filter(Species=="RT")%>%nrow()
+```
+
+## 2.2
+```{r}
+student_t_confidence_interval<-function(sample,confidence_level){
+  sample<-sample[!is.na(sample)] # remove any missing values
+  n<-length(sample) # compute sample size
+  mu_est<-mean(sample) # compute sample mean
+  sig_est<-sd(sample) # compute sample sd
+  alpha = 1-confidence_level # alpha from gamma
+  t<-qt(1-alpha/2,df=n-1) # get student t quantile
+  l=mu_est-(t/sqrt(n))*sig_est # lower
+  u=mu_est+(t/sqrt(n))*sig_est # upper
+  return(c(l,u))
+}
+
+num_trials <- 100000
+sample_size <- 30
+mu_0 <- 1
+sigma_0 <- 3
+alpha <- 0.05
+set.seed(0) # set random seed for reproducibility
+
+single_alpha_coverage_simulation_df <- data.frame(trial=seq(num_trials)) %>%
+  # generate random Gaussian samples:
+  mutate(sample=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_0,sd=sigma_0))) %>%
+  # generate confidence intervals:
+  mutate(ci_interval=map(.x=sample, .f=~student_t_confidence_interval(.x,1-alpha)))%>%
+  # check if interval covers mu_0:
+  mutate(cover=map_lgl(.x=ci_interval, .f=~((min(.x)<=mu_0)&(max(.x)>=mu_0))))%>%
+  # compute interval length:
+  mutate(ci_length=map_dbl(.x=ci_interval, .f=~(max(.x)-min(.x))))
+
+# estimate of coverage probability:
+single_alpha_coverage_simulation_df %>%
+  pull(cover) %>%
+  mean()
+```
+
+## 2.2 (Q1)
+```{r}
+set.seed(0) # set random seed for reproducibility
+probs_CI_contains_mu <- function(gamma){
+  num_trials <- 100000
+  sample_size <- 30
+  mu_0 <- 1
+  sigma_0 <- 3
+  alpha <- 1-gamma
+
+  single_alpha_coverage_simulation_df <- data.frame(trial=seq(num_trials)) %>%
+    # generate random Gaussian samples:
+    mutate(sample=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_0,sd=sigma_0))) %>%
+    # generate confidence intervals:
+    mutate(ci_interval=map(.x=sample, .f=~student_t_confidence_interval(.x,1-alpha)))%>%
+    # check if interval covers mu_0:
+    mutate(cover=map_lgl(.x=ci_interval, .f=~((min(.x)<=mu_0)&(max(.x)>=mu_0))))%>%
+    # compute interval length:
+    mutate(ci_length=map_dbl(.x=ci_interval, .f=~(max(.x)-min(.x))))
+
+  # estimate of coverage probability:
+  single_alpha_coverage_simulation_df %>%
+    pull(cover) %>%
+    mean()
+}
+
+df <- data.frame(gamma=seq(0.8,1,0.02)) %>%
+  mutate(probs=map_dbl(gamma, probs_CI_contains_mu))
+
+ggplot() + geom_point(data=df, aes(x=gamma, y=probs)) +
+  theme_bw()
+```
+
+## 2.2 (Q2)
+```{r}
+set.seed(0) # set random seed for reproducibility
+
+compute_CI_width <- function(gamma){
+  num_trials <- 100000
+  sample_size <- 30
+  mu_0 <- 1
+  sigma_0 <- 3
+  alpha <- 1-gamma
+  single_alpha_coverage_simulation_df <- data.frame(trial=seq(num_trials)) %>%
+    # generate random Gaussian samples:
+    mutate(sample=map(.x=trial,.f=~rnorm(n=sample_size,mean=mu_0,sd=sigma_0))) %>%
+    # generate confidence intervals:
+    mutate(ci_interval=map(.x=sample, .f=~student_t_confidence_interval(.x,1-alpha)))%>%
+    # check if interval covers mu_0:
+    mutate(cover=map_lgl(.x=ci_interval, .f=~((min(.x)<=mu_0)&(max(.x)>=mu_0))))%>%
+    # compute interval length:
+    mutate(ci_length=map_dbl(.x=ci_interval, .f=~(max(.x)-min(.x))))
+  
+  # estimate of coverage probability:
+  single_alpha_coverage_simulation_df %>%
+    pull(ci_length) %>%
+    mean()
+}
+
+df <- data.frame(gamma=seq(0.8,1,0.02)) %>%
+  mutate(averagewidth=map_dbl(gamma, compute_CI_width))
+
+ggplot() + geom_point(data=df, aes(x=gamma, y=averagewidth)) +
+  theme_bw() + ylab('Average length')
+```
+
+## 3.1 (Q1)
+```{r}
+library(palmerpenguins)
+
+bill_adelie <- penguins %>% filter(species=='Adelie') %>%
+  select(bill_length_mm) %>% pull() %>% discard(is.na)
+
+t.test(bill_adelie, mu=40, alternative = 'two.sided')
+
+ggplot(data=data.frame(bill_adelie=bill_adelie), aes(x=bill_adelie)) + geom_density() +
+  theme_bw()
+
+ggplot(data=data.frame(bill_adelie=bill_adelie), aes(sample=bill_adelie)) + stat_qq() +
+  theme_bw() + stat_qq_line(color="blue")
+```
+
+## 3.2 (Q1)
+```{r}
+my_t_test <- function(x, mu0){
+  sample_size <- length(x)
+  sample_mean <- mean(x)
+  sample_sd <- sd(x)
+  test_statistic <- (sample_mean - mu0)/(sample_sd/sqrt(sample_size))
+  p_value = 2*(1-pt(abs(test_statistic), df=sample_size-1))
+  return(p_value)
+}
+
+my_t_test(bill_adelie, mu=38.5)
+
+t.test(bill_adelie, mu=38.5, alternative = 'two.sided')
+```
+
